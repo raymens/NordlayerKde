@@ -30,7 +30,6 @@ Optional:
 ## Build & Run
 
 ```bash
-cd /home/raymens/RustroverProjects/NordlayerKde
 cargo run
 ```
 
