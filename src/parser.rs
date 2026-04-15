@@ -1,3 +1,44 @@
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConnectionStatus {
+    Connected,
+    Disconnected,
+    Connecting,
+    Reconnecting,
+    NotLoggedIn,
+    Unknown,
+}
+
+impl ConnectionStatus {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Connected => "connected",
+            Self::Disconnected => "disconnected",
+            Self::Connecting => "connecting",
+            Self::Reconnecting => "reconnecting",
+            Self::NotLoggedIn => "not logged in",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+pub fn parse_connection_status(output: &str) -> ConnectionStatus {
+    let lower = output.to_ascii_lowercase();
+
+    if lower.contains("not logged in") || lower.contains("logged out") {
+        ConnectionStatus::NotLoggedIn
+    } else if lower.contains("reconnecting") {
+        ConnectionStatus::Reconnecting
+    } else if lower.contains("connecting") {
+        ConnectionStatus::Connecting
+    } else if lower.contains("disconnected") {
+        ConnectionStatus::Disconnected
+    } else if lower.contains("connected") {
+        ConnectionStatus::Connected
+    } else {
+        ConnectionStatus::Unknown
+    }
+}
+
 pub fn parse_gateways(output: &str) -> Vec<String> {
     output
         .lines()
@@ -28,7 +69,27 @@ pub fn parse_gateways(output: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_gateways;
+    use super::{ConnectionStatus, parse_connection_status, parse_gateways};
+
+    #[test]
+    fn parses_connected_status() {
+        let output = "Status: Connected\nGateway: us-east-1";
+        assert_eq!(parse_connection_status(output), ConnectionStatus::Connected);
+    }
+
+    #[test]
+    fn parses_not_logged_in_status() {
+        let output = "Error: not logged in";
+        assert_eq!(
+            parse_connection_status(output),
+            ConnectionStatus::NotLoggedIn
+        );
+    }
+
+    #[test]
+    fn parses_unknown_status() {
+        assert_eq!(parse_connection_status("mystery state"), ConnectionStatus::Unknown);
+    }
 
     #[test]
     fn parses_simple_rows() {
@@ -42,4 +103,6 @@ mod tests {
         assert_eq!(parse_gateways(output), vec!["de-ber-1"]);
     }
 }
+
+
 

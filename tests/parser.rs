@@ -1,4 +1,4 @@
-use NordlayerKde::parser::parse_gateways;
+use NordlayerKde::parser::{ConnectionStatus, parse_connection_status, parse_gateways};
 
 #[test]
 fn parses_pipe_table_output() {
@@ -14,5 +14,17 @@ fn parses_plain_line_output() {
     let gateways = parse_gateways(output);
 
     assert_eq!(gateways, vec!["de-ber-1", "fr-par-1"]);
+}
+
+#[test]
+fn parses_disconnected_status() {
+    let output = "Status: Disconnected";
+    assert_eq!(parse_connection_status(output), ConnectionStatus::Disconnected);
+}
+
+#[test]
+fn parses_connecting_status() {
+    let output = "Status: Connecting";
+    assert_eq!(parse_connection_status(output), ConnectionStatus::Connecting);
 }
 

@@ -1,5 +1,5 @@
 use crate::cli::NordLayerCli;
-use crate::parser::parse_gateways;
+use crate::parser::{parse_connection_status, parse_gateways};
 use ksni::MenuItem;
 use ksni::menu::StandardItem;
 use notify_rust::Notification;
@@ -11,10 +11,12 @@ pub struct NordLayerTray {
 
 impl NordLayerTray {
     pub fn new() -> Self {
-        Self {
+        let mut tray = Self {
             cli: NordLayerCli::default(),
             last_status: "idle".to_string(),
-        }
+        };
+        tray.refresh_status();
+        tray
     }
 
     fn notify(summary: &str, body: &str) {
@@ -29,14 +31,14 @@ impl NordLayerTray {
                 } else {
                     output.lines().take(8).collect::<Vec<_>>().join("\n")
                 };
-                self.last_status = format!("{}: ok", action);
                 Self::notify("NordLayer", &body);
             }
             Err(err) => {
-                self.last_status = format!("{}: failed", action);
                 Self::notify("NordLayer error", &err.to_string());
             }
         }
+
+        self.refresh_status();
     }
 
     fn list_gateways(&mut self) {
@@ -44,18 +46,24 @@ impl NordLayerTray {
             Ok(output) => {
                 let gateways = parse_gateways(&output);
                 if gateways.is_empty() {
-                    self.last_status = "gateways: none parsed".to_string();
                     Self::notify("NordLayer gateways", &output);
                 } else {
-                    self.last_status = format!("gateways: {} found", gateways.len());
                     Self::notify("NordLayer gateways", &gateways.join("\n"));
                 }
             }
             Err(err) => {
-                self.last_status = "gateways: failed".to_string();
                 Self::notify("NordLayer error", &err.to_string());
             }
         }
+
+        self.refresh_status();
+    }
+
+    fn refresh_status(&mut self) {
+        self.last_status = match self.cli.run(&["status"]) {
+            Ok(output) => parse_connection_status(&output).label().to_string(),
+            Err(_) => "unknown".to_string(),
+        };
     }
 }
 
@@ -103,6 +111,12 @@ impl ksni::Tray for NordLayerTray {
             StandardItem {
                 label: "List Gateways".to_string(),
                 activate: Box::new(|tray: &mut Self| tray.list_gateways()),
+                ..Default::default()
+            }
+            .into(),
+            StandardItem {
+                label: "Refresh Status".to_string(),
+                activate: Box::new(|tray: &mut Self| tray.refresh_status()),
                 ..Default::default()
             }
             .into(),
