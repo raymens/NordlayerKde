@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=NordLayer KDE Tray
+Comment=KDE tray app for NordLayer CLI
+Exec=nordlayer_kde
+Icon=network-vpn
+Terminal=false
+Categories=Network;Security;Utility;
+Keywords=VPN;NordLayer;Tray;
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
+

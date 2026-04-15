@@ -40,6 +40,54 @@ cargo run
 
 The tray icon will appear in your Plasma system tray (usually bottom-right).
 
+## Install
+
+### Option 1: Download from GitHub Releases
+
+Each tagged release (`v*`) publishes:
+
+- `nordlayer-kde-linux-x86_64.tar.gz` (standalone binary)
+- `*.rpm` package(s)
+
+### Option 2: Build RPM locally
+
+```bash
+cargo install cargo-generate-rpm
+cargo build --release
+cargo generate-rpm
+```
+
+RPM output is written to:
+
+```bash
+target/generate-rpm/
+```
+
+Install (openSUSE example):
+
+```bash
+sudo zypper install target/generate-rpm/*.rpm
+```
+
+## Autostart (KDE)
+
+For tray apps, desktop autostart is preferred over a systemd service.
+
+If installed from RPM, launcher file is installed to:
+
+```bash
+/usr/share/applications/nordlayer-kde.desktop
+```
+
+Enable user autostart:
+
+```bash
+mkdir -p ~/.config/autostart
+cp /usr/share/applications/nordlayer-kde.desktop ~/.config/autostart/
+```
+
+You can also manage this via KDE System Settings -> Autostart.
+
 ## Test
 
 ```bash
@@ -63,4 +111,12 @@ cargo test
   - escaped `\n` rows
   - glued streams where markers appear back-to-back
 - If NordLayer CLI output format changes, update `GATEWAYS_TEMPLATE` and parser functions in `src/parser.rs`.
+
+## CI / Release Automation
+
+- GitHub Actions workflow: `.github/workflows/release.yml`
+- Trigger: push a tag like `v0.1.0`
+- Artifacts uploaded to the GitHub Release:
+  - release tarball
+  - RPM package(s)
 

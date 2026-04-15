@@ -7,3 +7,10 @@ edition = "2024"
 anyhow = "1.0"
 ksni = "0.2"
 notify-rust = "4.11"
+
+[package.metadata.generate-rpm]
+assets = [
+  { source = "target/release/nordlayer_kde", dest = "/usr/bin/nordlayer_kde", mode = "0755" },
+  { source = "packaging/nordlayer-kde.desktop", dest = "/usr/share/applications/nordlayer-kde.desktop", mode = "0644" },
+]
+
