@@ -3,15 +3,6 @@
 version = 4
 
 [[package]]
-name = "NordlayerKde"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "ksni",
- "notify-rust",
-]
-
-[[package]]
 name = "ansi_term"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -582,6 +573,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "488016bfae457b036d996092f6cb448677611ce4449e970ceaf42695203f218a"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "nordlayer_kde"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ksni",
+ "notify-rust",
 ]
 
 [[package]]

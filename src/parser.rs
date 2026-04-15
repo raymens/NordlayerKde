@@ -37,25 +37,9 @@ impl ConnectionStatus {
 //   nordlayer gateways -f "{{.Name}}"
 //
 // Verify available fields: nordlayer status --help / nordlayer gateways --help
-/// Go template for `nordlayer status -f STATUS_TEMPLATE`.
-/// Emits a single tab-separated line:  `<status>\t<server>`
-/// e.g.  `Connected\tus-east-1`   or   `Disconnected\t`
-pub const STATUS_TEMPLATE: &str = "{{.Status}}\t{{.Server}}";
 /// Go template for `nordlayer gateways -f GATEWAYS_TEMPLATE`.
 /// Outputs one gateway per line as: PRIVATE|id|name  or  SHARED|id|name
 pub const GATEWAYS_TEMPLATE: &str = "{{range .Private}}PRIVATE|{{.Id}}|{{.Name}}{{\"\\n\"}}{{end}}{{range .Shared}}SHARED|{{.Id}}|{{.Name}}{{\"\\n\"}}{{end}}";
-/// Parse `nordlayer status -f STATUS_TEMPLATE` output.
-/// Returns `(ConnectionStatus, Option<gateway_name>)`.
-pub fn parse_status_output(output: &str) -> (ConnectionStatus, Option<String>) {
-    let line = output.trim();
-    let mut parts = line.splitn(2, '\t');
-    let status_str = parts.next().unwrap_or("").trim();
-    let gateway = parts
-        .next()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty());
-    (parse_connection_status(status_str), gateway)
-}
 /// Parse `nordlayer gateways -f GATEWAYS_TEMPLATE` output.
 /// Each line is: `PRIVATE|id|name` or `SHARED|id|name`
 pub fn parse_gateways_output(output: &str) -> Vec<Gateway> {
@@ -165,49 +149,11 @@ pub fn parse_gateway_from_status(output: &str) -> Option<String> {
     }
     None
 }
-/// Parse plain-text `nordlayer gateways` table output (fallback).
-pub fn parse_gateways(output: &str) -> Vec<String> {
-    output
-        .lines()
-        .filter_map(|line| {
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                return None;
-            }
-            let lower = trimmed.to_ascii_lowercase();
-            if lower.contains("gateway") && lower.contains("city") {
-                return None;
-            }
-            if trimmed.chars().all(|c| c == '-' || c == '+' || c == '|') {
-                return None;
-            }
-            let first = trimmed
-                .trim_start_matches(['|', '-', '*', ' '])
-                .split(['|', ' '])
-                .find(|part| !part.is_empty())?;
-            Some(first.to_string())
-        })
-        .collect()
-}
 // ── Tests ─────────────────────────────────────────────────────────────────────
 #[cfg(test)]
 mod tests {
     use super::*;
     // Template-based parsers
-    #[test]
-    fn template_status_connected_with_gateway() {
-        let output = "Connected\tus-east-1";
-        let (status, gw) = parse_status_output(output);
-        assert_eq!(status, ConnectionStatus::Connected);
-        assert_eq!(gw, Some("us-east-1".to_string()));
-    }
-    #[test]
-    fn template_status_disconnected_no_gateway() {
-        let output = "Disconnected\t";
-        let (status, gw) = parse_status_output(output);
-        assert_eq!(status, ConnectionStatus::Disconnected);
-        assert_eq!(gw, None);
-    }
     #[test]
     fn template_gateways_one_per_line() {
         let output = "PRIVATE|id1|Private Gateway\nSHARED|id2|Shared Gateway\n";
@@ -324,15 +270,5 @@ mod tests {
             parse_connection_status("mystery state"),
             ConnectionStatus::Unknown
         );
-    }
-    #[test]
-    fn parses_simple_rows() {
-        let output = "us-east-1 online\nuk-lon-1 online\n";
-        assert_eq!(parse_gateways(output), vec!["us-east-1", "uk-lon-1"]);
-    }
-    #[test]
-    fn skips_header_and_separators() {
-        let output = "Gateway | City\n------- | ----\n| de-ber-1 | Berlin\n";
-        assert_eq!(parse_gateways(output), vec!["de-ber-1"]);
     }
 }
