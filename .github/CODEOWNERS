@@ -1,0 +1,8 @@
+# Require maintainer review for all repository changes.
+* @raymens
+
+# Require explicit review for CI/CD and release pipeline changes.
+.github/workflows/* @raymens
+Cargo.toml @raymens
+Cargo.lock @raymens
+

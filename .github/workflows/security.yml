@@ -1,0 +1,50 @@
+name: security
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "21 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  supply-chain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libdbus-1-dev
+
+      - name: Install cargo-audit
+        run: cargo install --locked cargo-audit
+
+      - name: Install cargo-deny
+        run: cargo install --locked cargo-deny
+
+      - name: Verify lockfile build
+        run: cargo build --locked
+
+      - name: Audit vulnerable dependencies
+        run: cargo audit
+
+      - name: Enforce dependency policy
+        run: cargo deny check advisories bans licenses sources
+

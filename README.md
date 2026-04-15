@@ -119,4 +119,20 @@ cargo test
 - Artifacts uploaded to the GitHub Release:
   - release tarball
   - RPM package(s)
+  - `SHA256SUMS.txt` checksums for verification
+
+## Security Hardening
+
+- Dependency automation:
+  - Dependabot for Cargo and GitHub Actions (`.github/dependabot.yml`)
+- Supply-chain checks in CI:
+  - `cargo audit`
+  - `cargo deny` with policy in `deny.toml`
+- Release/build integrity:
+  - `--locked` builds in CI workflows
+  - Least-privilege workflow permissions
+  - Release checksums (`SHA256SUMS.txt`)
+- Governance:
+  - `CODEOWNERS` for workflow/dependency manifest review
+  - `SECURITY.md` for private vulnerability reporting
 
