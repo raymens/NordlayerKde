@@ -1,7 +1,7 @@
 use crate::cli::NordLayerCli;
 use crate::parser::{
-    ConnectionStatus, GATEWAYS_TEMPLATE,
-    parse_connection_status, parse_gateway_from_status, parse_gateways_output,
+    ConnectionStatus, GATEWAYS_TEMPLATE, Gateway,
+    parse_connection_status, parse_gateway_from_status, parse_gateways_output, parse_login_state,
 };
 use ksni::MenuItem;
 use ksni::menu::{StandardItem, SubMenu};
@@ -75,7 +75,9 @@ pub struct NordLayerTray {
     cli: NordLayerCli,
     last_status: String,
     connection_status: ConnectionStatus,
-    gateways: Vec<String>,
+    gateways: Vec<Gateway>,
+    current_gateway: Option<String>,
+    is_logged_in: Option<bool>,
 }
 
 impl NordLayerTray {
@@ -85,6 +87,8 @@ impl NordLayerTray {
             last_status: "idle".to_string(),
             connection_status: ConnectionStatus::Unknown,
             gateways: Vec::new(),
+            current_gateway: None,
+            is_logged_in: None,
         };
         tray.refresh_status();
         tray.refresh_gateways();
@@ -133,19 +137,31 @@ impl NordLayerTray {
     fn refresh_status(&mut self) {
         match self.cli.run(&["status"]) {
             Ok(output) => {
+                self.is_logged_in = parse_login_state(&output);
                 let status = parse_connection_status(&output);
                 self.connection_status = status;
                 self.last_status = match status {
                     ConnectionStatus::Connected => match parse_gateway_from_status(&output) {
-                        Some(gw) => format!("connected: {}", gw),
-                        None => "connected".to_string(),
+                        Some(gw) => {
+                            self.current_gateway = Some(gw.clone());
+                            format!("connected: {}", gw)
+                        }
+                        None => {
+                            self.current_gateway = None;
+                            "connected".to_string()
+                        }
                     },
-                    _ => status.label().to_string(),
+                    _ => {
+                        self.current_gateway = None;
+                        status.label().to_string()
+                    }
                 };
             }
             Err(_) => {
                 self.connection_status = ConnectionStatus::Unknown;
                 self.last_status = "unknown".to_string();
+                self.current_gateway = None;
+                self.is_logged_in = None;
             }
         }
     }
@@ -178,23 +194,70 @@ impl ksni::Tray for NordLayerTray {
     }
 
     fn menu(&self) -> Vec<MenuItem<Self>> {
-        // Build the per-gateway "Connect to…" submenu items.
-        let gateway_items: Vec<MenuItem<Self>> = if self.gateways.is_empty() {
+        // Separate private and shared gateways
+        let private_gws: Vec<_> = self.gateways.iter().filter(|gw| gw.is_private).collect();
+        let shared_gws: Vec<_> = self.gateways.iter().filter(|gw| !gw.is_private).collect();
+
+        // Build "Private Gateways" submenu items
+        let private_items: Vec<MenuItem<Self>> = if private_gws.is_empty() {
             vec![StandardItem {
-                label: "No gateways — click Refresh Gateways".to_string(),
+                label: "No private gateways".to_string(),
                 enabled: false,
                 ..Default::default()
             }
             .into()]
         } else {
-            self.gateways
+            private_gws
                 .iter()
                 .map(|gw| {
-                    let gw = gw.clone();
+                    let gw_id = gw.id.clone();
+                    let gw_name = if let Some(ref current) = self.current_gateway {
+                        if current == &gw.id {
+                            format!("✓ {}", gw.name)
+                        } else {
+                            gw.name.clone()
+                        }
+                    } else {
+                        gw.name.clone()
+                    };
                     StandardItem {
-                        label: gw.clone(),
+                        label: gw_name,
                         activate: Box::new(move |tray: &mut Self| {
-                            tray.run_action("connect", &["connect", gw.as_str()]);
+                            tray.run_action("connect", &["connect", &gw_id]);
+                        }),
+                        ..Default::default()
+                    }
+                    .into()
+                })
+                .collect()
+        };
+
+        // Build "Shared Gateways" submenu items
+        let shared_items: Vec<MenuItem<Self>> = if shared_gws.is_empty() {
+            vec![StandardItem {
+                label: "No shared gateways".to_string(),
+                enabled: false,
+                ..Default::default()
+            }
+            .into()]
+        } else {
+            shared_gws
+                .iter()
+                .map(|gw| {
+                    let gw_id = gw.id.clone();
+                    let gw_name = if let Some(ref current) = self.current_gateway {
+                        if current == &gw.id {
+                            format!("✓ {}", gw.name)
+                        } else {
+                            gw.name.clone()
+                        }
+                    } else {
+                        gw.name.clone()
+                    };
+                    StandardItem {
+                        label: gw_name,
+                        activate: Box::new(move |tray: &mut Self| {
+                            tray.run_action("connect", &["connect", &gw_id]);
                         }),
                         ..Default::default()
                     }
@@ -211,8 +274,14 @@ impl ksni::Tray for NordLayerTray {
             }
             .into(),
             SubMenu {
-                label: "Connect to...".to_string(),
-                submenu: gateway_items,
+                label: "Private Gateways".to_string(),
+                submenu: private_items,
+                ..Default::default()
+            }
+            .into(),
+            SubMenu {
+                label: "Shared Gateways".to_string(),
+                submenu: shared_items,
                 ..Default::default()
             }
             .into(),
@@ -224,12 +293,23 @@ impl ksni::Tray for NordLayerTray {
                 ..Default::default()
             }
             .into(),
-            StandardItem {
-                label: "Login".to_string(),
-                activate: Box::new(|tray: &mut Self| tray.run_action("login", &["login"])),
-                ..Default::default()
-            }
-            .into(),
+            {
+                if self.is_logged_in == Some(true) {
+                    StandardItem {
+                        label: "Logged in".to_string(),
+                        enabled: false,
+                        ..Default::default()
+                    }
+                    .into()
+                } else {
+                    StandardItem {
+                        label: "Login".to_string(),
+                        activate: Box::new(|tray: &mut Self| tray.run_action("login", &["login"])),
+                        ..Default::default()
+                    }
+                    .into()
+                }
+            },
             StandardItem {
                 label: "Refresh Status".to_string(),
                 activate: Box::new(|tray: &mut Self| tray.refresh_status()),

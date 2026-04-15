@@ -1,5 +1,5 @@
 use NordlayerKde::parser::{
-    ConnectionStatus, parse_connection_status, parse_gateway_from_status,
+    ConnectionStatus, Gateway, parse_connection_status, parse_gateway_from_status,
     parse_gateways, parse_gateways_output, parse_status_output,
 };
 
@@ -21,13 +21,25 @@ fn template_status_disconnected_no_gateway() {
 
 #[test]
 fn template_gateways_one_per_line() {
-    let out = "us-east-1\nuk-lon-1\nde-ber-1\n";
-    assert_eq!(parse_gateways_output(out), vec!["us-east-1", "uk-lon-1", "de-ber-1"]);
+    let out = "PRIVATE|nl|Netherlands\nPRIVATE|be|Belgium\nSHARED|us|United States\n";
+    let gws = parse_gateways_output(out);
+    assert_eq!(
+        gws,
+        vec![
+            Gateway { id: "nl".into(), name: "Netherlands".into(), is_private: true },
+            Gateway { id: "be".into(), name: "Belgium".into(), is_private: true },
+            Gateway { id: "us".into(), name: "United States".into(), is_private: false },
+        ]
+    );
 }
 
 #[test]
 fn template_gateways_ignores_blank_lines() {
-    assert_eq!(parse_gateways_output("us-east-1\n\nuk-lon-1\n"), vec!["us-east-1", "uk-lon-1"]);
+    let out = "PRIVATE|id1|Private\n\nSHARED|id2|Shared\n";
+    let gws = parse_gateways_output(out);
+    assert_eq!(gws.len(), 2);
+    assert!(gws[0].is_private);
+    assert!(!gws[1].is_private);
 }
 
 // ── Heuristic / plain-text parser tests (fallback) ────────────────────────────

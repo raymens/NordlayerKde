@@ -1,5 +1,12 @@
 // ── Shared types ──────────────────────────────────────────────────────────────
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Gateway {
+    pub id: String,
+    pub name: String,
+    pub is_private: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnectionStatus {
     Connected,
@@ -35,8 +42,8 @@ impl ConnectionStatus {
 /// e.g.  `Connected\tus-east-1`   or   `Disconnected\t`
 pub const STATUS_TEMPLATE: &str = "{{.Status}}\t{{.Server}}";
 /// Go template for `nordlayer gateways -f GATEWAYS_TEMPLATE`.
-/// Outputs one gateway ID per line (both shared and private gateways).
-pub const GATEWAYS_TEMPLATE: &str = "{{range .Shared}}{{.Id}}\n{{end}}{{range .Private}}{{.Id}}\n{{end}}";
+/// Outputs one gateway per line as: PRIVATE|id|name  or  SHARED|id|name
+pub const GATEWAYS_TEMPLATE: &str = "{{range .Private}}PRIVATE|{{.Id}}|{{.Name}}{{\"\\n\"}}{{end}}{{range .Shared}}SHARED|{{.Id}}|{{.Name}}{{\"\\n\"}}{{end}}";
 /// Parse `nordlayer status -f STATUS_TEMPLATE` output.
 /// Returns `(ConnectionStatus, Option<gateway_name>)`.
 pub fn parse_status_output(output: &str) -> (ConnectionStatus, Option<String>) {
@@ -50,12 +57,57 @@ pub fn parse_status_output(output: &str) -> (ConnectionStatus, Option<String>) {
     (parse_connection_status(status_str), gateway)
 }
 /// Parse `nordlayer gateways -f GATEWAYS_TEMPLATE` output.
-/// Each non-empty line is a gateway name.
-pub fn parse_gateways_output(output: &str) -> Vec<String> {
-    output
-        .lines()
-        .map(|l| l.trim().to_string())
-        .filter(|l| !l.is_empty())
+/// Each line is: `PRIVATE|id|name` or `SHARED|id|name`
+pub fn parse_gateways_output(output: &str) -> Vec<Gateway> {
+    let normalized = output.replace("\\n", "\n");
+    let marker_positions: Vec<(usize, bool)> = [
+        ("PRIVATE|", true),
+        ("SHARED|", false),
+    ]
+    .into_iter()
+    .flat_map(|(marker, is_private)| {
+        normalized
+            .match_indices(marker)
+            .map(move |(idx, _)| (idx, is_private))
+    })
+    .collect();
+
+    if marker_positions.is_empty() {
+        return Vec::new();
+    }
+
+    let mut marker_positions = marker_positions;
+    marker_positions.sort_by_key(|(idx, _)| *idx);
+
+    marker_positions
+        .iter()
+        .enumerate()
+        .filter_map(|(i, (start, is_private))| {
+            let end = marker_positions
+                .get(i + 1)
+                .map(|(next_start, _)| *next_start)
+                .unwrap_or_else(|| normalized.len());
+            let chunk = normalized[*start..end].trim();
+            let payload = if *is_private {
+                chunk.strip_prefix("PRIVATE|")?
+            } else {
+                chunk.strip_prefix("SHARED|")?
+            }
+            .trim();
+
+            let mut parts = payload.splitn(2, '|');
+            let id = parts.next()?.trim();
+            let name = parts.next()?.trim();
+            if id.is_empty() || name.is_empty() {
+                return None;
+            }
+
+            Some(Gateway {
+                id: id.to_string(),
+                name: name.to_string(),
+                is_private: *is_private,
+            })
+        })
         .collect()
 }
 // ── Heuristic / plain-text parsers (fallback) ─────────────────────────────────
@@ -65,6 +117,8 @@ pub fn parse_connection_status(output: &str) -> ConnectionStatus {
     let lower = output.to_ascii_lowercase();
     if lower.contains("not logged in") || lower.contains("logged out") {
         ConnectionStatus::NotLoggedIn
+    } else if lower.contains("not connected") {
+        ConnectionStatus::Disconnected
     } else if lower.contains("reconnecting") {
         ConnectionStatus::Reconnecting
     } else if lower.contains("connecting") {
@@ -76,6 +130,32 @@ pub fn parse_connection_status(output: &str) -> ConnectionStatus {
     } else {
         ConnectionStatus::Unknown
     }
+}
+
+/// Parse login state from plain-text `nordlayer status` output.
+/// Returns:
+/// - `Some(true)` when output indicates logged in
+/// - `Some(false)` when output indicates logged out/not logged in
+/// - `None` when login state cannot be determined
+pub fn parse_login_state(output: &str) -> Option<bool> {
+    let lower = output.to_ascii_lowercase();
+    if lower.contains("not logged in") || lower.contains("logged out") {
+        return Some(false);
+    }
+
+    for line in output.lines() {
+        let lower_line = line.to_ascii_lowercase();
+        if lower_line.starts_with("login:") {
+            if lower_line.contains("logged in") {
+                return Some(true);
+            }
+            if lower_line.contains("not logged in") || lower_line.contains("logged out") {
+                return Some(false);
+            }
+        }
+    }
+
+    None
 }
 /// Extract a gateway name from plain-text `nordlayer status` output.
 /// Looks for lines whose key contains "gateway" or "server".
@@ -138,16 +218,49 @@ mod tests {
     }
     #[test]
     fn template_gateways_one_per_line() {
-        let output = "us-east-1\nuk-lon-1\nde-ber-1\n";
+        let output = "PRIVATE|id1|Private Gateway\nSHARED|id2|Shared Gateway\n";
+        let gateways = parse_gateways_output(output);
         assert_eq!(
-            parse_gateways_output(output),
-            vec!["us-east-1", "uk-lon-1", "de-ber-1"]
+            gateways,
+            vec![
+                Gateway { id: "id1".into(), name: "Private Gateway".into(), is_private: true },
+                Gateway { id: "id2".into(), name: "Shared Gateway".into(), is_private: false },
+            ]
         );
     }
     #[test]
     fn template_gateways_ignores_blank_lines() {
-        let output = "us-east-1\n\nuk-lon-1\n";
-        assert_eq!(parse_gateways_output(output), vec!["us-east-1", "uk-lon-1"]);
+        let output = "PRIVATE|id1|Private\n\nSHARED|id2|Shared\n";
+        let gateways = parse_gateways_output(output);
+        assert_eq!(gateways.len(), 2);
+        assert!(gateways[0].is_private);
+        assert!(!gateways[1].is_private);
+    }
+
+    #[test]
+    fn template_gateways_supports_escaped_newline_stream() {
+        let output = "PRIVATE|id1|Private\\nSHARED|id2|Shared\\n";
+        let gateways = parse_gateways_output(output);
+        assert_eq!(gateways.len(), 2);
+        assert_eq!(gateways[0].id, "id1");
+        assert_eq!(gateways[1].id, "id2");
+    }
+
+    #[test]
+    fn template_gateways_supports_glued_stream_without_newlines() {
+        let output = "PRIVATE|id1|Approved GatewaySHARED|id2|United States";
+        let gateways = parse_gateways_output(output);
+        assert_eq!(gateways.len(), 2);
+        assert_eq!(gateways[0].name, "Approved Gateway");
+        assert_eq!(gateways[1].name, "United States");
+    }
+
+    #[test]
+    fn template_gateways_keeps_spaces_in_names() {
+        let output = "PRIVATE|approved-gw|My Private Network\n";
+        let gateways = parse_gateways_output(output);
+        assert_eq!(gateways.len(), 1);
+        assert_eq!(gateways[0].name, "My Private Network");
     }
     // Heuristic parsers (plain-text fallback)
     #[test]
@@ -180,6 +293,24 @@ mod tests {
     fn parses_not_logged_in_status() {
         let output = "Error: not logged in";
         assert_eq!(parse_connection_status(output), ConnectionStatus::NotLoggedIn);
+    }
+
+    #[test]
+    fn parses_vpn_not_connected_status() {
+        let output = "Login: Logged in [user org]\nVPN: Not Connected\n";
+        assert_eq!(parse_connection_status(output), ConnectionStatus::Disconnected);
+    }
+
+    #[test]
+    fn parses_login_state_logged_in() {
+        let output = "Login: Logged in [user org]\nVPN: Not Connected\n";
+        assert_eq!(parse_login_state(output), Some(true));
+    }
+
+    #[test]
+    fn parses_login_state_logged_out() {
+        let output = "Login: Not logged in\n";
+        assert_eq!(parse_login_state(output), Some(false));
     }
     #[test]
     fn parses_unknown_status() {
