@@ -96,25 +96,51 @@ impl NordLayerTray {
     }
 
     fn notify(summary: &str, body: &str) {
-        let _ = Notification::new().summary(summary).body(body).show();
+        let safe_body = if body.trim().is_empty() {
+            "No details available"
+        } else {
+            body
+        };
+        let _ = Notification::new()
+            .appname("NordLayer KDE Tray")
+            .summary(summary)
+            .body(safe_body)
+            .show();
+    }
+
+    fn notify_action_result(&self, action: &str, details: &str, is_error: bool) {
+        // Some KDE notification layouts de-emphasize/hide the body, so keep
+        // the most important info in the summary line too.
+        let summary = if is_error {
+            format!("NordLayer: {} failed ({})", action, self.last_status)
+        } else {
+            format!("NordLayer: {} ({})", action, self.last_status)
+        };
+        Self::notify(&summary, details);
+    }
+
+    fn action_body(&self, action: &str, cli_output: &str) -> String {
+        let details = if cli_output.trim().is_empty() {
+            format!("{} completed", action)
+        } else {
+            cli_output.lines().take(8).collect::<Vec<_>>().join("\n")
+        };
+        format!("{}\nStatus: {}", details, self.last_status)
     }
 
     fn run_action(&mut self, action: &str, args: &[&str]) {
         match self.cli.run(args) {
             Ok(output) => {
-                let body = if output.is_empty() {
-                    format!("{} completed", action)
-                } else {
-                    output.lines().take(8).collect::<Vec<_>>().join("\n")
-                };
-                Self::notify("NordLayer", &body);
+                self.refresh_status();
+                let body = self.action_body(action, &output);
+                self.notify_action_result(action, &body, false);
             }
             Err(err) => {
-                Self::notify("NordLayer error", &err.to_string());
+                self.refresh_status();
+                let body = format!("{} failed: {}\nStatus: {}", action, err, self.last_status);
+                self.notify_action_result(action, &body, true);
             }
         }
-
-        self.refresh_status();
     }
 
     fn list_gateways(&mut self) {
@@ -128,7 +154,7 @@ impl NordLayerTray {
                 self.gateways = parse_gateways_output(&output);
             }
             Err(err) => {
-                Self::notify("NordLayer error", &err.to_string());
+                self.notify_action_result("refresh gateways", &err.to_string(), true);
                 self.gateways = Vec::new();
             }
         }
