@@ -1,6 +1,6 @@
 use NordlayerKde::parser::{
-    ConnectionStatus, Gateway, parse_connection_status, parse_gateway_from_status,
-    parse_gateways, parse_gateways_output, parse_status_output,
+    ConnectionStatus, Gateway, parse_connection_status, parse_gateway_from_status, parse_gateways,
+    parse_gateways_output, parse_status_output,
 };
 
 // ── Template-based parser tests ───────────────────────────────────────────────
@@ -26,9 +26,21 @@ fn template_gateways_one_per_line() {
     assert_eq!(
         gws,
         vec![
-            Gateway { id: "nl".into(), name: "Netherlands".into(), is_private: true },
-            Gateway { id: "be".into(), name: "Belgium".into(), is_private: true },
-            Gateway { id: "us".into(), name: "United States".into(), is_private: false },
+            Gateway {
+                id: "nl".into(),
+                name: "Netherlands".into(),
+                is_private: true
+            },
+            Gateway {
+                id: "be".into(),
+                name: "Belgium".into(),
+                is_private: true
+            },
+            Gateway {
+                id: "us".into(),
+                name: "United States".into(),
+                is_private: false
+            },
         ]
     );
 }
@@ -63,18 +75,26 @@ fn parses_plain_line_output() {
 #[test]
 fn parses_disconnected_status() {
     let output = "Status: Disconnected";
-    assert_eq!(parse_connection_status(output), ConnectionStatus::Disconnected);
+    assert_eq!(
+        parse_connection_status(output),
+        ConnectionStatus::Disconnected
+    );
 }
 
 #[test]
 fn parses_connecting_status() {
     let output = "Status: Connecting";
-    assert_eq!(parse_connection_status(output), ConnectionStatus::Connecting);
+    assert_eq!(
+        parse_connection_status(output),
+        ConnectionStatus::Connecting
+    );
 }
 
 #[test]
 fn extracts_gateway_when_connected() {
     let output = "Status: Connected\nGateway: uk-lon-1";
-    assert_eq!(parse_gateway_from_status(output), Some("uk-lon-1".to_string()));
+    assert_eq!(
+        parse_gateway_from_status(output),
+        Some("uk-lon-1".to_string())
+    );
 }
-

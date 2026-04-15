@@ -59,56 +59,48 @@ pub fn parse_status_output(output: &str) -> (ConnectionStatus, Option<String>) {
 /// Parse `nordlayer gateways -f GATEWAYS_TEMPLATE` output.
 /// Each line is: `PRIVATE|id|name` or `SHARED|id|name`
 pub fn parse_gateways_output(output: &str) -> Vec<Gateway> {
-    let normalized = output.replace("\\n", "\n");
-    let marker_positions: Vec<(usize, bool)> = [
-        ("PRIVATE|", true),
-        ("SHARED|", false),
-    ]
-    .into_iter()
-    .flat_map(|(marker, is_private)| {
-        normalized
-            .match_indices(marker)
-            .map(move |(idx, _)| (idx, is_private))
-    })
-    .collect();
-
-    if marker_positions.is_empty() {
-        return Vec::new();
+    fn first_marker(s: &str) -> Option<(usize, bool, usize)> {
+        let private = s.find("PRIVATE|").map(|idx| (idx, true, "PRIVATE|".len()));
+        let shared = s.find("SHARED|").map(|idx| (idx, false, "SHARED|".len()));
+        match (private, shared) {
+            (Some(p), Some(sh)) => Some(if p.0 <= sh.0 { p } else { sh }),
+            (Some(p), None) => Some(p),
+            (None, Some(sh)) => Some(sh),
+            (None, None) => None,
+        }
     }
 
-    let mut marker_positions = marker_positions;
-    marker_positions.sort_by_key(|(idx, _)| *idx);
+    let normalized = output.replace("\\n", "\n");
+    let mut rest = normalized.as_str();
+    let mut gateways = Vec::new();
 
-    marker_positions
-        .iter()
-        .enumerate()
-        .filter_map(|(i, (start, is_private))| {
-            let end = marker_positions
-                .get(i + 1)
-                .map(|(next_start, _)| *next_start)
-                .unwrap_or_else(|| normalized.len());
-            let chunk = normalized[*start..end].trim();
-            let payload = if *is_private {
-                chunk.strip_prefix("PRIVATE|")?
-            } else {
-                chunk.strip_prefix("SHARED|")?
-            }
-            .trim();
+    while let Some((marker_pos, is_private, marker_len)) = first_marker(rest) {
+        rest = &rest[marker_pos + marker_len..];
+        let next_pos = first_marker(rest)
+            .map(|(idx, _, _)| idx)
+            .unwrap_or(rest.len());
+        let payload = rest[..next_pos].trim();
 
-            let mut parts = payload.splitn(2, '|');
-            let id = parts.next()?.trim();
-            let name = parts.next()?.trim();
-            if id.is_empty() || name.is_empty() {
-                return None;
-            }
+        let mut parts = payload.splitn(2, '|');
+        let Some(id) = parts.next().map(str::trim).filter(|s| !s.is_empty()) else {
+            rest = &rest[next_pos..];
+            continue;
+        };
+        let Some(name) = parts.next().map(str::trim).filter(|s| !s.is_empty()) else {
+            rest = &rest[next_pos..];
+            continue;
+        };
 
-            Some(Gateway {
-                id: id.to_string(),
-                name: name.to_string(),
-                is_private: *is_private,
-            })
-        })
-        .collect()
+        gateways.push(Gateway {
+            id: id.to_string(),
+            name: name.to_string(),
+            is_private,
+        });
+
+        rest = &rest[next_pos..];
+    }
+
+    gateways
 }
 // ── Heuristic / plain-text parsers (fallback) ─────────────────────────────────
 /// Classify a status string from any output format.
@@ -223,8 +215,16 @@ mod tests {
         assert_eq!(
             gateways,
             vec![
-                Gateway { id: "id1".into(), name: "Private Gateway".into(), is_private: true },
-                Gateway { id: "id2".into(), name: "Shared Gateway".into(), is_private: false },
+                Gateway {
+                    id: "id1".into(),
+                    name: "Private Gateway".into(),
+                    is_private: true
+                },
+                Gateway {
+                    id: "id2".into(),
+                    name: "Shared Gateway".into(),
+                    is_private: false
+                },
             ]
         );
     }
@@ -292,13 +292,19 @@ mod tests {
     #[test]
     fn parses_not_logged_in_status() {
         let output = "Error: not logged in";
-        assert_eq!(parse_connection_status(output), ConnectionStatus::NotLoggedIn);
+        assert_eq!(
+            parse_connection_status(output),
+            ConnectionStatus::NotLoggedIn
+        );
     }
 
     #[test]
     fn parses_vpn_not_connected_status() {
         let output = "Login: Logged in [user org]\nVPN: Not Connected\n";
-        assert_eq!(parse_connection_status(output), ConnectionStatus::Disconnected);
+        assert_eq!(
+            parse_connection_status(output),
+            ConnectionStatus::Disconnected
+        );
     }
 
     #[test]
@@ -314,7 +320,10 @@ mod tests {
     }
     #[test]
     fn parses_unknown_status() {
-        assert_eq!(parse_connection_status("mystery state"), ConnectionStatus::Unknown);
+        assert_eq!(
+            parse_connection_status("mystery state"),
+            ConnectionStatus::Unknown
+        );
     }
     #[test]
     fn parses_simple_rows() {

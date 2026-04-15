@@ -16,6 +16,8 @@ Small KDE-friendly system tray app that wraps NordLayer CLI commands.
 - **Checkmark (✓)** next to the currently connected gateway
 - **Quick actions**: Disconnect, Login, Refresh Status, Refresh Gateways, Quit
 - **Desktop notifications** for all command results and errors
+  - Summary always includes action + status (useful on shells that hide body text)
+  - Body includes command output (up to 8 lines) and the latest status
 
 ## Prerequisites
 
@@ -47,4 +49,14 @@ cargo test
 - Separates gateways into two submenus for easy navigation
 - Shows a checkmark next to whichever gateway you're connected to
 - All menu items refresh status after running actions, so you immediately see the result
+
+## Parser Assumptions
+
+- `status` parsing is plain-text and looks for keywords like `Login:`, `Connected`, `Not Connected`, `not logged in`.
+- `gateways` parsing expects template markers in output: `PRIVATE|<id>|<name>` and `SHARED|<id>|<name>`.
+- Gateway parser accepts three stream styles:
+  - normal newline-separated rows
+  - escaped `\n` rows
+  - glued streams where markers appear back-to-back
+- If NordLayer CLI output format changes, update `GATEWAYS_TEMPLATE` and parser functions in `src/parser.rs`.
 

@@ -45,4 +45,3 @@ impl NordLayerCli {
         Ok(stdout)
     }
 }
-
