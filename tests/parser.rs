@@ -1,5 +1,5 @@
 use nordlayer_kde::parser::{
-    ConnectionStatus, Gateway, parse_connection_status, parse_gateway_from_status, parse_gateways,
+    ConnectionStatus, Gateway, parse_connection_status, parse_gateway_from_status,
     parse_gateways_output,
 };
 
