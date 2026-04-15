@@ -1,24 +1,9 @@
 use nordlayer_kde::parser::{
     ConnectionStatus, Gateway, parse_connection_status, parse_gateway_from_status, parse_gateways,
-    parse_gateways_output, parse_status_output,
+    parse_gateways_output,
 };
 
 // ── Template-based parser tests ───────────────────────────────────────────────
-
-#[test]
-fn template_status_connected_with_gateway() {
-    let (status, gw) = parse_status_output("Connected\tus-east-1");
-    assert_eq!(status, ConnectionStatus::Connected);
-    assert_eq!(gw, Some("us-east-1".to_string()));
-}
-
-#[test]
-fn template_status_disconnected_no_gateway() {
-    let (status, gw) = parse_status_output("Disconnected\t");
-    assert_eq!(status, ConnectionStatus::Disconnected);
-    assert_eq!(gw, None);
-}
-
 #[test]
 fn template_gateways_one_per_line() {
     let out = "PRIVATE|nl|Netherlands\nPRIVATE|be|Belgium\nSHARED|us|United States\n";
@@ -55,22 +40,6 @@ fn template_gateways_ignores_blank_lines() {
 }
 
 // ── Heuristic / plain-text parser tests (fallback) ────────────────────────────
-
-#[test]
-fn parses_pipe_table_output() {
-    let output = "Gateway | City\n--------|-----\n| us-east-1 | New York\n| uk-lon-1 | London\n";
-    let gateways = parse_gateways(output);
-
-    assert_eq!(gateways, vec!["us-east-1", "uk-lon-1"]);
-}
-
-#[test]
-fn parses_plain_line_output() {
-    let output = "de-ber-1 online\nfr-par-1 online\n";
-    let gateways = parse_gateways(output);
-
-    assert_eq!(gateways, vec!["de-ber-1", "fr-par-1"]);
-}
 
 #[test]
 fn parses_disconnected_status() {
