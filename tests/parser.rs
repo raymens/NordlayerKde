@@ -1,4 +1,4 @@
-use NordlayerKde::parser::{ConnectionStatus, parse_connection_status, parse_gateways};
+use NordlayerKde::parser::{ConnectionStatus, parse_connection_status, parse_gateway_from_status, parse_gateways};
 
 #[test]
 fn parses_pipe_table_output() {
@@ -26,5 +26,11 @@ fn parses_disconnected_status() {
 fn parses_connecting_status() {
     let output = "Status: Connecting";
     assert_eq!(parse_connection_status(output), ConnectionStatus::Connecting);
+}
+
+#[test]
+fn extracts_gateway_when_connected() {
+    let output = "Status: Connected\nGateway: uk-lon-1";
+    assert_eq!(parse_gateway_from_status(output), Some("uk-lon-1".to_string()));
 }
 

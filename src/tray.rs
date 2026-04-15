@@ -1,5 +1,5 @@
 use crate::cli::NordLayerCli;
-use crate::parser::{parse_connection_status, parse_gateways};
+use crate::parser::{parse_connection_status, parse_gateway_from_status, parse_gateways};
 use ksni::MenuItem;
 use ksni::menu::StandardItem;
 use notify_rust::Notification;
@@ -61,7 +61,18 @@ impl NordLayerTray {
 
     fn refresh_status(&mut self) {
         self.last_status = match self.cli.run(&["status"]) {
-            Ok(output) => parse_connection_status(&output).label().to_string(),
+            Ok(output) => {
+                let status = parse_connection_status(&output);
+                match status {
+                    crate::parser::ConnectionStatus::Connected => {
+                        match parse_gateway_from_status(&output) {
+                            Some(gw) => format!("connected: {}", gw),
+                            None => "connected".to_string(),
+                        }
+                    }
+                    _ => status.label().to_string(),
+                }
+            }
             Err(_) => "unknown".to_string(),
         };
     }

@@ -21,6 +21,27 @@ impl ConnectionStatus {
     }
 }
 
+/// Tries to extract the active gateway name from `nordlayer status` output.
+/// Handles key: value lines whose key contains "gateway" or "server".
+/// Example lines it recognises:
+///   "Gateway: us-east-1"
+///   "Current gateway: de-ber-1"
+///   "Server:  fr-par-1"
+pub fn parse_gateway_from_status(output: &str) -> Option<String> {
+    for line in output.lines() {
+        let lower = line.to_ascii_lowercase();
+        if (lower.contains("gateway") || lower.contains("server")) && lower.contains(':') {
+            if let Some(value) = line.splitn(2, ':').nth(1) {
+                let trimmed = value.trim();
+                if !trimmed.is_empty() {
+                    return Some(trimmed.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
 pub fn parse_connection_status(output: &str) -> ConnectionStatus {
     let lower = output.to_ascii_lowercase();
 
@@ -69,12 +90,30 @@ pub fn parse_gateways(output: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ConnectionStatus, parse_connection_status, parse_gateways};
+    use super::{ConnectionStatus, parse_connection_status, parse_gateway_from_status, parse_gateways};
 
     #[test]
     fn parses_connected_status() {
         let output = "Status: Connected\nGateway: us-east-1";
         assert_eq!(parse_connection_status(output), ConnectionStatus::Connected);
+    }
+
+    #[test]
+    fn extracts_gateway_from_status_output() {
+        let output = "Status: Connected\nGateway: us-east-1";
+        assert_eq!(parse_gateway_from_status(output), Some("us-east-1".to_string()));
+    }
+
+    #[test]
+    fn extracts_gateway_with_current_prefix() {
+        let output = "Status: Connected\nCurrent gateway: de-ber-1";
+        assert_eq!(parse_gateway_from_status(output), Some("de-ber-1".to_string()));
+    }
+
+    #[test]
+    fn returns_none_when_disconnected_no_gateway() {
+        let output = "Status: Disconnected";
+        assert_eq!(parse_gateway_from_status(output), None);
     }
 
     #[test]
