@@ -2,6 +2,11 @@
 
 Small KDE-friendly system tray app that wraps NordLayer CLI commands.
 
+## AI Note
+
+This project was developed with significant AI assistance (code generation, refactoring,
+and documentation). Please review and test changes before using in production.
+
 ## Features
 
 - **Colored shield icon** in Plasma system tray:
