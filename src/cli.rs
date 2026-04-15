@@ -16,6 +16,14 @@ impl Default for NordLayerCli {
 }
 
 impl NordLayerCli {
+    /// Run a command appending `-f <template>` for structured output.
+    /// Use the template constants in `parser` (e.g. `STATUS_TEMPLATE`, `GATEWAYS_TEMPLATE`).
+    pub fn run_formatted(&self, args: &[&str], template: &str) -> Result<String> {
+        let mut full: Vec<&str> = args.to_vec();
+        full.extend_from_slice(&["-f", template]);
+        self.run(&full)
+    }
+
     pub fn run(&self, args: &[&str]) -> Result<String> {
         let output = Command::new(&self.bin)
             .args(args)

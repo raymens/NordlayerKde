@@ -1,9 +1,10 @@
 use crate::cli::NordLayerCli;
 use crate::parser::{
-    ConnectionStatus, parse_connection_status, parse_gateway_from_status, parse_gateways,
+    ConnectionStatus, GATEWAYS_TEMPLATE,
+    parse_connection_status, parse_gateway_from_status, parse_gateways_output,
 };
 use ksni::MenuItem;
-use ksni::menu::StandardItem;
+use ksni::menu::{StandardItem, SubMenu};
 use notify_rust::Notification;
 
 /// Returns 1.0 if the point (px, py) lies inside the shield polygon, 0.0 otherwise.
@@ -74,6 +75,7 @@ pub struct NordLayerTray {
     cli: NordLayerCli,
     last_status: String,
     connection_status: ConnectionStatus,
+    gateways: Vec<String>,
 }
 
 impl NordLayerTray {
@@ -82,8 +84,10 @@ impl NordLayerTray {
             cli: NordLayerCli::default(),
             last_status: "idle".to_string(),
             connection_status: ConnectionStatus::Unknown,
+            gateways: Vec::new(),
         };
         tray.refresh_status();
+        tray.refresh_gateways();
         tray
     }
 
@@ -110,21 +114,20 @@ impl NordLayerTray {
     }
 
     fn list_gateways(&mut self) {
-        match self.cli.run(&["gateways"]) {
+        self.refresh_gateways();
+        self.refresh_status();
+    }
+
+    fn refresh_gateways(&mut self) {
+        match self.cli.run_formatted(&["gateways"], GATEWAYS_TEMPLATE) {
             Ok(output) => {
-                let gateways = parse_gateways(&output);
-                if gateways.is_empty() {
-                    Self::notify("NordLayer gateways", &output);
-                } else {
-                    Self::notify("NordLayer gateways", &gateways.join("\n"));
-                }
+                self.gateways = parse_gateways_output(&output);
             }
             Err(err) => {
                 Self::notify("NordLayer error", &err.to_string());
+                self.gateways = Vec::new();
             }
         }
-
-        self.refresh_status();
     }
 
     fn refresh_status(&mut self) {
@@ -175,6 +178,31 @@ impl ksni::Tray for NordLayerTray {
     }
 
     fn menu(&self) -> Vec<MenuItem<Self>> {
+        // Build the per-gateway "Connect to…" submenu items.
+        let gateway_items: Vec<MenuItem<Self>> = if self.gateways.is_empty() {
+            vec![StandardItem {
+                label: "No gateways — click Refresh Gateways".to_string(),
+                enabled: false,
+                ..Default::default()
+            }
+            .into()]
+        } else {
+            self.gateways
+                .iter()
+                .map(|gw| {
+                    let gw = gw.clone();
+                    StandardItem {
+                        label: gw.clone(),
+                        activate: Box::new(move |tray: &mut Self| {
+                            tray.run_action("connect", &["connect", gw.as_str()]);
+                        }),
+                        ..Default::default()
+                    }
+                    .into()
+                })
+                .collect()
+        };
+
         vec![
             StandardItem {
                 label: format!("Status: {}", self.last_status),
@@ -182,15 +210,9 @@ impl ksni::Tray for NordLayerTray {
                 ..Default::default()
             }
             .into(),
-            StandardItem {
-                label: "Login".to_string(),
-                activate: Box::new(|tray: &mut Self| tray.run_action("login", &["login"])),
-                ..Default::default()
-            }
-            .into(),
-            StandardItem {
-                label: "Connect".to_string(),
-                activate: Box::new(|tray: &mut Self| tray.run_action("connect", &["connect"])),
+            SubMenu {
+                label: "Connect to...".to_string(),
+                submenu: gateway_items,
                 ..Default::default()
             }
             .into(),
@@ -203,14 +225,20 @@ impl ksni::Tray for NordLayerTray {
             }
             .into(),
             StandardItem {
-                label: "List Gateways".to_string(),
-                activate: Box::new(|tray: &mut Self| tray.list_gateways()),
+                label: "Login".to_string(),
+                activate: Box::new(|tray: &mut Self| tray.run_action("login", &["login"])),
                 ..Default::default()
             }
             .into(),
             StandardItem {
                 label: "Refresh Status".to_string(),
                 activate: Box::new(|tray: &mut Self| tray.refresh_status()),
+                ..Default::default()
+            }
+            .into(),
+            StandardItem {
+                label: "Refresh Gateways".to_string(),
+                activate: Box::new(|tray: &mut Self| tray.list_gateways()),
                 ..Default::default()
             }
             .into(),
