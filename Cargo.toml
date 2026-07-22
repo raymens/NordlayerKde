@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0"
-ksni = "0.2"
+ksni = "0.3"
 notify-rust = "4.11"
 
 [package.metadata.generate-rpm]
